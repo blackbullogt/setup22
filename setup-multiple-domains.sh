@@ -1,8 +1,9 @@
 #!/bin/bash
+
 # --- Перевірка root ---
 if [[ $EUID -ne 0 ]]; then
-    echo "Цей скрипт потрібно запускати з правами root"
-    exit 1
+   echo "Цей скрипт потрібно запускати з правами root"
+   exit 1
 fi
 
 # --- Функція для перевірки успіху ---
@@ -23,8 +24,8 @@ email=$1
 shift
 domains=("$@")
 
-# --- Оновлення та установка пакетів ---
-echo ">>> Оновлення системи та встановлення потрібних пакетів..."
+# --- Установка пакетів ---
+echo ">>> Встановлення потрібних пакетів..."
 apt update
 apt install -y nginx ufw fail2ban software-properties-common \
     php8.1-fpm php8.1-curl \
@@ -32,22 +33,22 @@ apt install -y nginx ufw fail2ban software-properties-common \
     needrestart unattended-upgrades
 check_success "встановлення пакетів"
 
-echo "unattended-upgrades unattended-upgrades/enable_auto_updates boolean true" | \
-    debconf-set-selections
+# --- Автоматичні оновлення ---
+echo ">>> Включення автоматичних оновлень..."
+dpkg-reconfigure -plow unattended-upgrades
+sed -i 's/#\$nrconf{restart} =.*/$nrconf{restart} = "a";/' /etc/needrestart/needrestart.conf
 
-dpkg-reconfigure -f noninteractive unattended-upgrades
-
-# --- Налаштування UFW ---
+# --- UFW ---
 echo ">>> Налаштування UFW..."
 ufw allow 'Nginx Full'
 ufw allow 22
 ufw --force enable
 check_success "ufw"
 
-# --- Налаштування fail2ban ---
+# --- Fail2ban ---
 echo ">>> Налаштування fail2ban..."
 if [ ! -f /etc/fail2ban/jail.local ]; then
-    cat > /etc/fail2ban/jail.local << EOF
+cat > /etc/fail2ban/jail.local << EOF
 [sshd]
 enabled = true
 maxretry = 5
@@ -56,7 +57,7 @@ fi
 systemctl enable --now fail2ban
 check_success "fail2ban"
 
-# --- Видалення дефолтного сайту nginx ---
+# --- Видалення дефолтного сайту ---
 rm -f /etc/nginx/sites-enabled/default
 
 # --- Функція налаштування домену ---
@@ -66,13 +67,13 @@ setup_domain() {
 
     echo ">>> Налаштовую домен: $domain"
 
-    # Створення веб-каталогу
     mkdir -p "$web_root"
     chown -R www-data:www-data "$web_root"
     chmod -R 755 "$web_root"
+
     echo "<html><body><h1>Welcome to $domain</h1></body></html>" > "$web_root/index.html"
 
-    # Nginx конфігурація (HTTP)
+    # nginx config (http)
     cat > "/etc/nginx/sites-available/$domain" << EOF
 server {
     listen 80;
@@ -98,7 +99,7 @@ EOF
     ln -sf "/etc/nginx/sites-available/$domain" "/etc/nginx/sites-enabled/"
     nginx -t && systemctl reload nginx
 
-    # Certbot SSL без інтерактиву
+    # certbot (SSL + редірект)
     certbot --nginx -d "$domain" -d "www.$domain" \
         --non-interactive --agree-tos --email "$email" --redirect
     check_success "SSL для $domain"
@@ -106,12 +107,12 @@ EOF
     echo ">>> Домен $domain готовий!"
 }
 
-# --- Налаштування всіх доменів ---
+# --- Запуск для всіх доменів ---
 for domain in "${domains[@]}"; do
     setup_domain "$domain"
 done
 
-# --- Перевірка та рестарт nginx ---
+# --- Перевірка та рестарт ---
 nginx -t && systemctl reload nginx
 check_success "nginx reload"
 
