@@ -1,9 +1,8 @@
 #!/bin/bash
-
 # --- Перевірка root ---
 if [[ $EUID -ne 0 ]]; then
-   echo "Цей скрипт потрібно запускати з правами root"
-   exit 1
+    echo "Цей скрипт потрібно запускати з правами root"
+    exit 1
 fi
 
 # --- Функція для перевірки успіху ---
@@ -24,8 +23,8 @@ email=$1
 shift
 domains=("$@")
 
-# --- Установка пакетів ---
-echo ">>> Встановлення потрібних пакетів..."
+# --- Оновлення та установка пакетів ---
+echo ">>> Оновлення системи та встановлення потрібних пакетів..."
 apt update
 apt install -y nginx ufw fail2ban software-properties-common \
     php8.1-fpm php8.1-curl \
@@ -35,20 +34,20 @@ check_success "встановлення пакетів"
 
 # --- Автоматичні оновлення ---
 echo ">>> Включення автоматичних оновлень..."
-dpkg-reconfigure -plow unattended-upgrades
+dpkg-reconfigure -f noninteractive unattended-upgrades
 sed -i 's/#\$nrconf{restart} =.*/$nrconf{restart} = "a";/' /etc/needrestart/needrestart.conf
 
-# --- UFW ---
+# --- Налаштування UFW ---
 echo ">>> Налаштування UFW..."
 ufw allow 'Nginx Full'
 ufw allow 22
 ufw --force enable
 check_success "ufw"
 
-# --- Fail2ban ---
+# --- Налаштування fail2ban ---
 echo ">>> Налаштування fail2ban..."
 if [ ! -f /etc/fail2ban/jail.local ]; then
-cat > /etc/fail2ban/jail.local << EOF
+    cat > /etc/fail2ban/jail.local << EOF
 [sshd]
 enabled = true
 maxretry = 5
@@ -57,7 +56,7 @@ fi
 systemctl enable --now fail2ban
 check_success "fail2ban"
 
-# --- Видалення дефолтного сайту ---
+# --- Видалення дефолтного сайту nginx ---
 rm -f /etc/nginx/sites-enabled/default
 
 # --- Функція налаштування домену ---
@@ -67,13 +66,13 @@ setup_domain() {
 
     echo ">>> Налаштовую домен: $domain"
 
+    # Створення веб-каталогу
     mkdir -p "$web_root"
     chown -R www-data:www-data "$web_root"
     chmod -R 755 "$web_root"
-
     echo "<html><body><h1>Welcome to $domain</h1></body></html>" > "$web_root/index.html"
 
-    # nginx config (http)
+    # Nginx конфігурація (HTTP)
     cat > "/etc/nginx/sites-available/$domain" << EOF
 server {
     listen 80;
@@ -99,7 +98,7 @@ EOF
     ln -sf "/etc/nginx/sites-available/$domain" "/etc/nginx/sites-enabled/"
     nginx -t && systemctl reload nginx
 
-    # certbot (SSL + редірект)
+    # Certbot SSL без інтерактиву
     certbot --nginx -d "$domain" -d "www.$domain" \
         --non-interactive --agree-tos --email "$email" --redirect
     check_success "SSL для $domain"
@@ -107,12 +106,12 @@ EOF
     echo ">>> Домен $domain готовий!"
 }
 
-# --- Запуск для всіх доменів ---
+# --- Налаштування всіх доменів ---
 for domain in "${domains[@]}"; do
     setup_domain "$domain"
 done
 
-# --- Перевірка та рестарт ---
+# --- Перевірка та рестарт nginx ---
 nginx -t && systemctl reload nginx
 check_success "nginx reload"
 
