@@ -24,13 +24,18 @@ email=$1
 shift
 domains=("$@")
 
-# --- Установка необхідних пакетів ---
-echo "📦 Встановлення потрібних пакетів..."
+# --- Вимкнення діалогів needrestart ---
+echo "⚙️ Вимикаємо діалоги needrestart..."
+export NEEDRESTART_MODE=a
+sed -i 's/^\$nrconf{restart} = .*/\$nrconf{restart} = '\''a'\'';/g' /etc/needrestart/needrestart.conf 2>/dev/null || true
+
+# --- Оновлення системи ---
+echo "📦 Оновлення системи та встановлення потрібних пакетів..."
 apt update -y && apt upgrade -y
 check_success "Оновлення системи"
 
 apt install -y nginx ufw fail2ban certbot python3-certbot-nginx php php-fpm php-curl
-check_success "Встановлення пакетів"
+check_success "Встановлення необхідних пакетів"
 
 # --- UFW ---
 echo "🔐 Налаштування UFW..."
