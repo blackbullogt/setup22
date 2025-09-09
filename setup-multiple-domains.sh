@@ -32,10 +32,10 @@ apt install -y nginx ufw fail2ban software-properties-common \
     needrestart unattended-upgrades
 check_success "встановлення пакетів"
 
-# --- Автоматичні оновлення ---
-echo ">>> Включення автоматичних оновлень..."
+echo "unattended-upgrades unattended-upgrades/enable_auto_updates boolean true" | \
+    debconf-set-selections
+
 dpkg-reconfigure -f noninteractive unattended-upgrades
-sed -i 's/#\$nrconf{restart} =.*/$nrconf{restart} = "a";/' /etc/needrestart/needrestart.conf
 
 # --- Налаштування UFW ---
 echo ">>> Налаштування UFW..."
