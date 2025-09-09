@@ -24,22 +24,29 @@ email=$1
 shift
 domains=("$@")
 
-# --- Установка необхідних пакетів ---
-echo "Встановлення потрібних пакетів..."
+# --- Установка пакетів ---
+echo ">>> Встановлення потрібних пакетів..."
 apt update
-apt install -y nginx ufw fail2ban software-properties-common certbot python3-certbot-nginx
-apt install -y php8.1-fpm php8.1-curl
+apt install -y nginx ufw fail2ban software-properties-common \
+    php8.1-fpm php8.1-curl \
+    certbot python3-certbot-nginx \
+    needrestart unattended-upgrades
 check_success "встановлення пакетів"
 
+# --- Автоматичні оновлення ---
+echo ">>> Включення автоматичних оновлень..."
+dpkg-reconfigure -plow unattended-upgrades
+sed -i 's/#\$nrconf{restart} =.*/$nrconf{restart} = "a";/' /etc/needrestart/needrestart.conf
+
 # --- UFW ---
-echo "Налаштування UFW..."
+echo ">>> Налаштування UFW..."
 ufw allow 'Nginx Full'
 ufw allow 22
 ufw --force enable
 check_success "ufw"
 
 # --- Fail2ban ---
-echo "Налаштування fail2ban..."
+echo ">>> Налаштування fail2ban..."
 if [ ! -f /etc/fail2ban/jail.local ]; then
 cat > /etc/fail2ban/jail.local << EOF
 [sshd]
@@ -92,8 +99,9 @@ EOF
     ln -sf "/etc/nginx/sites-available/$domain" "/etc/nginx/sites-enabled/"
     nginx -t && systemctl reload nginx
 
-    # certbot (додає SSL + редірект)
-    certbot --nginx -d "$domain" -d "www.$domain" --non-interactive --agree-tos --email "$email" --redirect
+    # certbot (SSL + редірект)
+    certbot --nginx -d "$domain" -d "www.$domain" \
+        --non-interactive --agree-tos --email "$email" --redirect
     check_success "SSL для $domain"
 
     echo ">>> Домен $domain готовий!"
